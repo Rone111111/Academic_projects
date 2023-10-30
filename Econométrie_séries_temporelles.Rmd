@@ -1,0 +1,498 @@
+---
+title: "Taux d'investissement de l'Espagne"
+output: html_document
+date: "2023-03-15"
+---
+
+# Introduction
+
+## Contexte historique
+
+Au cours des années 1970, l'Espagne a connu une période de croissance économique rapide, marquée par une augmentation du taux d'investissement dans le pays. Cependant, cette croissance a été tempérée par la crise pétrolière de 1973, qui a eu un impact négatif sur l'économie espagnole.
+
+En 1977 le pacte de la Moncloa permet de faire remonter la pente de l'économie espagnole avec un dévelopement fort de l'investissement privé.
+
+Fin des années 79 et début des années 1980, l'Espagne a subi le second choc pétrolier, qui a entraîné une baisse importante du taux d'investissement dans le pays. L'intégration à la Communauté Economique Européenne (CEE) puis du système monétaire Européen permit à l'Espagne d'améliorer sa situation économique fin des années 80.
+
+Au début des années 90, l'Espagne fit face à une crise de confiance envers son économie faisant ralentir sa croissance, l'Espagne a ensuite connu une croissance économique soutenue, grace à certaines décisions politiques tel que la réforme de l'emploi. Cette période de croissance fut interrompue par la crise financière mondiale de 2008, qui a entraîné une baisse importante du taux d'investissement en Espagne.
+
+Depuis lors, l'Espagne a connu une période de reprise économique, marquée par une augmentation progressive du taux d'investissement dans le pays. Cependant, le taux d'investissement en Espagne reste inférieur à celui des autres grandes économies européennes, notamment l'Allemagne et la France.
+
+### Génération des données et statistiques déscriptives de l'investissement
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(readr)
+library(dplyr)
+library(urca)
+library(CADFtest)
+library(lmtest)
+library(FinTS)
+library(parallel)
+library(doSNOW)
+library(forecast)
+library(ggplot2)
+
+tabinvestissement=read.csv("investissement.csv")
+inv=subset(tabinvestissement,select=c(LOCATION,TIME,Value))
+Iespagne=inv[inv$LOCATION=="ESP",]
+Iespagne = subset(Iespagne, TIME >= 1975)
+X=ts(Iespagne$Value/100,freq=1,start=1975)
+summary(X)
+```
+
+### Chronograme de l'investissement
+```{r}
+plot.ts(X, main = "Evolution de l'investissement en Espagne de 1975 à 2021", ylab = "Investissement", xlab = "Années", type = "o")
+```
+\br
+
+Sur ce graphique nous pouvons observer l'augmentation de l'investissement entre 1975 et 2021.
+
+### Statistiques déscriptives du taux d'investissement
+```{r echo=FALSE, warning=FALSE}
+tabPIB=read.csv("PIB.csv")
+pib=subset(tabPIB,select=c(LOCATION,TIME,Value))
+PIBespagne=pib[pib$LOCATION=="ESP",]
+PIBespagne = subset(PIBespagne, TIME >= 1975)
+Y=ts(Iespagne$Value/PIBespagne$Value,freq=1,start=1975)
+summary(Y)
+```
+
+### Chronogramme du taux d'investissement 
+```{r echo=FALSE}
+plot.ts(Y, main = "Evolution du taux d'investissement de l'Espagne de 1975 à 2021", ylab = "Taux d'investissement", xlab = "Années", type = "o")
+abline(v = c("1977"), col="blue")
+text(x=1977, y=0.185, labels="Pacte de \n la Moncloa", pos=1, col="blue", cex=0.75)
+abline(v = c("1999"), col="blue")
+text(x=1999, y=0.185, labels="Passage à \n l'Euro", pos=1, col="blue", cex=0.75)
+abline(v = c("1994"), col="blue")
+text(x=1994, y=0.185, labels="Réforme de \n l'emploi", pos=3, col="blue", cex=0.75)
+abline(v = c("1986"), col="blue")
+text(x=1986, y=0.185, labels="Intégration à la \n CEE", pos=1, col="blue", cex=0.75)
+lines(X)
+
+rect(2008, par("usr")[3], 2016, par("usr")[4], col = adjustcolor("#F5A9A9", alpha.f = 0.5), border = NA)
+text(x=2012.1, y=0.245, labels="Crise économique \n espagnole", pos=1, col="red", cex=0.7)
+
+symbols(x = 2019, y = 0.2, circles = rep(1, 1), add = TRUE,inches = FALSE,fg = "red",lwd = 1)
+text(x=2019, y=0.2, labels="Crise du \n Covid", pos=1, col="red", cex=0.7)
+
+symbols(x = 2008, y = 0.28, circles = rep(1, 1), add = TRUE,inches = FALSE,fg = "red",lwd = 1)
+text(x=2008, y=0.265, labels="Crise des \n subprimes", pos=1, col="red", cex=0.7)
+
+symbols(x = 1979, y = 0.22, circles = rep(1, 1), add = TRUE,inches = FALSE,fg = "red",lwd = 1)
+text(x=1979, y=0.21, labels="Second choc \n pétrolier", pos=1, col="red", cex=0.7)
+
+abline(h = 0.2242, col = "green")
+text(x=2021, y = 0.22, labels="Taux d'investissement \n médian", col = "green", cex = 0.7, pos = 1)
+
+```
+
+
+La série présente une tendance décroissante sur la période, de plus la variance est indépendante du temps donc notre série est homoscédastique. \br
+Nous retrouvons bien les résultats évoqués dans l'introduction sur ce chronograme, avec les moments de chutes du taux d'investissement causé principalement par le second choc pétrolier et la crise des subprimes.
+On observe que le taux d'investissement peine à rejoindre la médiane de la série EN 2020.
+
+
+# Stationnarité
+
+On va chercher à savoir si le PGD de notre série est stationnaire
+
+### ACF
+```{r}
+library(urca)
+acf(Y)
+```
+
+
+D'après l'ACF nous avons $\rho(1), \rho(2), \rho(3), \rho(4), \rho(9), \rho(10), \rho(11), \rho(12), \rho(13)$ de significatifs et donc présentant des corrélations.
+
+### PACF
+
+```{r}
+pacf(Y)
+```
+
+
+D'après la PACF il n'ya que le premier et le deuxième $\rho$ de significatif.
+
+### Test de racine unitaire
+
+#### Test de Dickey-Fuller
+
+\br
+Après avoir rejeté la spécification "trend" et "drift", on prendra la spécification "none", on va estimer le modèle suivant:
+
+$$\Delta X_t = (\rho-1)X_{t-1}+\varepsilon_t$$
+
+On cherche à tester l'hypothèse suivante :
+
+- H$_0$ : $\rho -1 = 0$ 
+
+- H$_1$ : $\mid \rho \mid < 1$ 
+
+Si la statistique t pour ($\rho$-1) > -1.95 alors on accepte H0.
+
+```{r}
+summary(ur.df(Y,type="none",lag=0))
+```
+
+-1.075 > -1.95 Donc on accepte H0($\rho - 1 = 0$), donc d'après Dickey-Fuller la série est DS et présence d'une racine unitaire.
+
+On va chercher a savoir si il y'a de l'autocorrélation dans les résidus afin de valider le résultat précédent.
+
+```{r echo=FALSE, fig.align='center', message=FALSE, warning=FALSE}
+plot(ur.df(Y,type="none",lag=0))
+```
+Il y a de l'autocorrélation et de l'autocorrélation partielle dans les résidus du modèle donc les résultats de Dickey-Fuller sont invalides, on va donc réaliser le test de Dickey-Fuller augmenté afin de prendre en compte cette autocorrélation.
+
+
+
+#### Test de Dickey-Fuller augmenté
+
+
+
+La nouvelle spécification du modèle devient (au retard $p$)
+$$X_t = (\rho-1) X_{t-1} + \beta_0 + \beta_1 tendance_t + \sum_{j=1}^p\gamma_j\Delta_{X_{t-j}} + \varepsilon_t$$
+
+
+```{r}
+pmax = as.integer(12*(length(Y)/100)^(0.25)) #formue de schwert
+summary(CADFtest(Y, criterions="MAIC", type="none", max.lag.y=pmax))
+```
+
+Le nombre de retards à ajouter dans la régression pour tenir compte de l'autocorrélation est de 9 avec le MAIC.
+
+Nous avons supprimer tout les $\gamma$ non significatifs, à la fin nous ne retrouvons plus qu'un retard.
+
+```{r}
+summary(ur.df(Y,type="none",lag=1))
+```
+
+la valeur de z1 est significative, 1.748 > 1.61.
+
+Avec Dickey-Fuller et 1 explicatives supplémentaire, on accepte H0($\rho - 1 = 0$) avec -0.5926 > -1.95, donc la série est DS.
+
+On vérifie que nous avons bien éliminé l'autocorrélation:
+```{r}
+plot(ur.df(Y,type="none",lag=1))
+```
+
+
+Il n'y a plus d'autocorrélations dans les résidus, les conclusions du test de Dickey-Fuller augmenté sont valides.
+Le modèle s'écrit alors:
+
+$$X_t = (\rho-1)X_{t-1} + \varepsilon_t + \sum_{j=1}^9\gamma_j\Delta_{X_{t-j}}$$
+
+#### Test de Zivot et Andrews
+
+Le modèle est le suivant:
+
+$$X_t = \beta_0 + \beta_1t + \rho X_{t-1} + \delta_1 DU_t(T_B) + \delta_2 DT_t(T_B) + \sum_{j=1}^p\gamma_j\Delta_{X_{t-j}} + \varepsilon_t$$
+
+On test:
+
+H0: $\rho = 1$ (Ds sans changement structurel)
+
+Ha: $\mid \rho \mid < 1$ (TS avec un unique changement structurel)
+
+```{r}
+summary(ur.za(Y, model = "intercept", lag=pmax-9))
+```
+Nous prenons la spécification "intercept" car DT n'est pas significatif avec 1 retard.
+
+La date de rupture est la 34éme observation.
+
+La statistique t = -5.12 < -4.8 on rejette H0, la série est TS avec un unique changement structurel.
+
+
+#### Test de Lee et Strazich
+
+On prend la spécification "crash" car nous avions la spécification "intercept" pour ZA.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+source("~/Documents/M1/S2/Econométrie série temporelle/LeeStrazicichUnitRoot-master/LeeStrazicichUnitRootTestParallelization.R", encoding = 'UTF-8')
+```
+
+On va maintenant chercher à tester s'il y a un changement structurel, avec $2$ `breaks` possibles. Dans l'équation :
+
+$$\Delta y_t = \delta' \Delta Z_t + \phi (y_{t-1} - \psi_X - Z_{t-1}\delta') + u_t$$
+
+On teste l'hypothèse suivante :
+
+- H$_0$ : $\phi = 0$ (DS avec date de rupture dans la constante)
+
+- H$_1$ : $\phi \neq 0$ (TS avec un changement structurel)
+
+Nous prenons lag = 4 pour éviter les problèmes d'inversion de matrices.
+
+##### LS avec une date de rupture
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+myBreaks = 1
+myModel = "break"
+myLags <- 4
+cl <- makeCluster(max(1, detectCores() - 1))
+registerDoSNOW(cl)
+myParallel_LS <- ur.ls.bootstrap(y=Y , model = myModel, breaks = myBreaks, lags = myLags, method = "Fixed", pn = 0.1, critval = "bootstrap", print.results = "print")
+```
+La statsitique calculée: -3.19
+
+La valeur critique au seuil de 5% étant supérieur à la statistique calculé on a:
+-3.19 > -4.51 donc on accepte H0, donc le processus qui a généré la série est DS avec une date de rupture.
+
+Avec comme première date de rupture, la 30e position soit l'année 2005.
+
+##### LS avec deux dates de ruptures
+```{r}
+myBreaks = 2
+myModel = "break"
+myLags <- 4
+cl <- makeCluster(max(1, detectCores() - 1))
+registerDoSNOW(cl)
+myParallel_LS <- ur.ls.bootstrap(y=Y , model = myModel, breaks = myBreaks, lags = myLags, method = "Fixed", pn = 0.1, critval = "bootstrap", print.results = "print")
+```
+la statistique calculé est -5.05 > -5.73
+On rejette H0, donc la série est DS.
+
+Nous retiendrons alors comme résultat que la série est DS avec une date de rupture.
+
+# PGD de la série différencié
+
+## Stationnarisation
+
+On peut transformer une série issue d’un processus DS en processus stationnaire en la différenciant.
+
+
+```{r}
+inv_diff = diff(Y)
+plot(inv_diff,type='l',col=4)
+
+```
+
+
+Le taux d'investissement à une tendance constante, il n'y a pas non plus d'homscédasticité.
+
+## Test de Dickey-Fuller
+
+Après avoir tester et rejetter les spécifications "trend" et "drift", nous garderons la spécification "none".
+
+```{r}
+summary(ur.df(inv_diff,type="none",lag=0))
+```
+
+La statistique t calculé pour ($\rho - 1$) = -3.269 < -1.95, donc on rejette H0; $\rho - 1$ est alors différent de 0.
+
+Donc la série est stationnaire.
+
+```{r}
+plot(ur.df(inv_diff,type="none",lag=0)) 
+```
+
+Nous n'observons pas la présence d'autocorrélation dans les aléas, nous indiquant que l'autocorrélation est bien prise en compte par notre modèle.
+
+Ainsi nous pouvons alors valider le résultat de stationnarité de la série différencié du taux d'investissement.
+
+
+
+# Estimation
+
+## Autocorrélation
+
+```{r}
+par(mfrow=c(1,2))
+Acf(inv_diff, main="ACF du taux d'investissement")
+pacf(inv_diff, main="PACF du taux d'investissement")
+```
+
+
+On observe de l'autocorrélation partiel à l'ordre 1.
+
+
+## Test de ljung-box
+
+- H$_0$ : $\rho(1) = \rho(2) = \dots = \rho(K) =0$
+
+- H$_1$ : Au moins un des $\rho(k) \neq 0$
+
+La statistique de test utilisée est :
+$$Q_K = T(T+1) \sum_{k=1}^{K} \frac{\hat\rho(k)^2}{T-k}$$
+```{r}
+Box.test(inv_diff, lag = 1, type ="Ljung-Box")
+```
+La pvalue est inférieur à 0.05.
+
+On rejette H0, on peut donc admettre qu'il y a de l'autocorrélation dans nos données à l'ordre 1.
+
+## EACF
+```{r message=FALSE, warning=FALSE}
+library(TSA)
+eacf(inv_diff)
+```
+
+Nous pouvons faire un ARMA(1,0), (0,1) et (1,1) d'après l'eacf.
+
+
+```{r}
+library(forcats)
+reg1 = Arima(inv_diff, order=c(2,0,1), include.mean = FALSE)
+library(lmtest)
+coeftest(reg1)
+```
+
+Nous avons bien tout les coefficients de significatifs.
+
+## Estimation des aléas
+
+### Test de Jarques-Berra
+
+On va tester:
+
+H0: La variable aléatoire est normalement distribué 
+
+Ha: La variable aléatoire n'est pas normalement distribué
+
+Avec:
+$$JB = \frac{n-k}{6}\times (S^2 + \frac{(K-2)^2}{4})$$
+
+```{r}
+jarque.bera.test(reg1$res)
+```
+
+La pvalue 0.4259 > 0.05 donc on accepte H0, les aléas sont nomalement distribués.
+
+### Test de student 
+
+On va tester:
+
+H0: L'espérance des aléas est nulle
+
+Ha: L'espérance des aléas n'est pas nulle
+
+Avec:
+$$t = \frac{\mid m(e) \mid}{\sigma_e} \times \sqrt{T}$$
+
+```{r}
+t.test(reg1$residuals) 
+standres=(reg1$res-mean(reg1$res))/sd(reg1$res)
+Box.test(standres,type="Ljung-Box",lag=15)
+```
+La p-value est supérieur à 5% donc on ne rejette pas H0.
+
+Le modèle à donc réussit à prendre en compte l'autocorrélation.
+
+Donc l'espérance des aléas est nulles et il n'y a pas d'autocorrélation des aléas (grace au test de Ljung-Box sur les aléas standardisés avec un lag de 15).
+
+### Test d'Engle
+
+On va tester:
+
+H0: $a_{1} = a_{2} = .. = a_{p} = 0$
+
+Ha: $a_{1} \neq 0$
+
+```{r}
+ArchTest(standres, lag=12)
+```
+0.60 > 0.05 donc on accepte H0, il n'y a pas d'effet ARCH ni de cluster de volatilité sur les donnés.
+
+Les aléas sont alors bien des bruits blancs, nous pouvons alors utiliser le modèle afin de faire des inférences.
+
+# Prévision
+
+```{r}
+BIC(reg1)
+```
+Le critére d'information Bayésien de notre modèle vaut -283.69.
+
+```{r}
+prev = forecast(reg1, h=4, level=0.95)
+prev
+```
+
+Nous avons une prévision croissante allant de -0.001% à 0.004%.
+
+```{r}
+plot(prev, lwd=1, main="Prévision sur quatre ans du taux d'investissement espagnol", ylab="Taux d'investissement espagnol", xlab="Années")
+```
+
+
+Les résidus étant des bruits blancs nous pouvons utiliser la valeur de l'intervalle de confiance pour les 
+prévisions.
+
+ - 2022: -0.02% à 0.017% 
+ 
+ - 2023: -0.02% à 0.023% 
+ 
+ - 2024: -0.019% à 0.025% 
+ 
+ - 2025: -0.018% à 0.026% 
+
+Plus on avance dans le temps et plus la prévision est incertaine.
+
+
+
+# Annexe
+
+## Dickey-Fuller spécification trend
+```{r}
+summary(ur.df(Y,type="trend",lag=0))
+```
+On accepte H0 avec $\beta1$ = 0
+
+On rejette également le test de Dickey Fuller avec la spécification drift
+```{r}
+summary(ur.df(Y,type="drift",lag=0))
+```
+On accepte H1 avec $\beta0$ = 0
+
+## Dickey-Fuller augmenté avec 9 explicatives,
+```{r}
+summary(ur.df(Y,type="none",lag=9))
+```
+Le dernier coefficient n'est pas significatif donc nous ne pouvons pas conserver ce modèle.
+
+## Test de ZA 
+
+avec lag = 9:
+```{r}
+summary(ur.za(Y, model = "both", lag=pmax))
+```
+
+avec lag = 1 et both:
+```{r}
+summary(ur.za(Y, model = "both", lag=1))
+```
+DT n'est pas significatif nous sommes obligés de passer à la spécification "intercept".
+
+## Modèles non retenues
+
+MA(1)
+```{r}
+library(forcats)
+reg2 = Arima(inv_diff, order=c(0,2,1))
+library(lmtest)
+coeftest(reg2)
+```
+Ce modèle à été laissé de côté afin de minimiser le BIC.
+
+ARMA(1,1)
+```{r}
+library(forcats)
+reg3 = Arima(inv_diff, order=c(1,2,1))
+library(lmtest)
+coeftest(reg3)
+```
+Les coefficients ne sont pas significatifs avec ce modèle.
+
+AR(1)
+```{r}
+library(forcats)
+reg4 = Arima(inv_diff, order=c(1,2,0))
+library(lmtest)
+coeftest(reg4)
+```
+
+On ne conserve pas ce modèle car les aléas sont anormalement distribués:
+```{r}
+jarque.bera.test(reg4$res)
+```
+En effet on rejette H0 avec la pvalue inférieur à 0.05.
